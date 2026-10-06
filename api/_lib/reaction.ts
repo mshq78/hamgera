@@ -8,8 +8,11 @@ import { EventWindow, eventStatus } from '../../shared/reaction/validate.js';
 
 const CODE_ALPHABET = 'abcdefghjkmnpqrstuvwxyz23456789'; // no look-alikes
 
+/** Six characters keep the link short enough for an SMS (31^6 ≈ 887 million possible codes). */
+export const EVENT_CODE_LENGTH = 6;
+
 export function newEventCode(): string {
-  const bytes = randomBytes(10);
+  const bytes = randomBytes(EVENT_CODE_LENGTH);
   return Array.from(bytes, (b) => CODE_ALPHABET[b % CODE_ALPHABET.length]).join('');
 }
 export const newId = () => randomUUID();

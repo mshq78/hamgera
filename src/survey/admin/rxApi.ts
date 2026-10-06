@@ -61,5 +61,5 @@ export const rxApi = {
   setTags: (pw: string, responseId: string, questionId: string, tags: string[]) => post<{ ok: true }>(pw, { action: 'setTags', responseId, questionId, tags }),
 };
 
-/** The link participants open. The form is served from the same site, behind the hash router. */
-export const surveyLink = (code: string) => `${window.location.origin}/#/s/${code}`;
+/** The link participants open: short enough for an SMS. (The older form `/#/s/<code>` keeps working.) */
+export const surveyLink = (code: string) => `${window.location.origin}/s/${code}`;

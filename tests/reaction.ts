@@ -106,7 +106,7 @@ export async function runReaction() {
 
   equal('admin API needs the admin password', (await call(reactionHandler, { query: { resource: 'events' } })).status, 401);
   const created = await call(reactionHandler, { method: 'POST', headers: ADMIN, body: { action: 'createEvent', title: 'بوت‌کمپ ۳ت', eventDate: '2026-10-10', cohort: 'دورهٔ ۱', location: 'تهران', segments: ['مدیران', 'کارشناسان'], isActive: true } });
-  check('event created with a public code', created.status === 200 && /^[a-z0-9]{10}$/.test(created.body.code), JSON.stringify(created.body));
+  check('event created with a short public code (6 characters)', created.status === 200 && /^[a-z0-9]{6}$/.test(created.body.code), JSON.stringify(created.body));
   const { id: eventId, code } = created.body as { id: string; code: string };
   equal('event title is required', (await call(reactionHandler, { method: 'POST', headers: ADMIN, body: { action: 'createEvent', title: '  ' } })).body.error, 'invalid_title');
   equal('end must be after start', (await call(reactionHandler, { method: 'POST', headers: ADMIN, body: { action: 'createEvent', title: 'x', opensAt: '2026-10-10T10:00:00Z', closesAt: '2026-10-10T09:00:00Z' } })).body.error, 'closes_before_opens');
@@ -114,7 +114,10 @@ export async function runReaction() {
   const info = await call(surveyHandler, { query: { code } });
   equal('public: event info only (title, date, groups, status)', [info.body.title, info.body.eventDate, info.body.segments, info.body.status], ['بوت‌کمپ ۳ت', '2026-10-10', ['مدیران', 'کارشناسان'], 'open']);
   check('public: nothing about responses or the code table leaks', !JSON.stringify(info.body).includes('responses') && !('id' in info.body));
-  equal('public: unknown code → 404', (await call(surveyHandler, { query: { code: 'zzzzzzzzzz' } })).status, 404);
+  equal('public: unknown code → 404', (await call(surveyHandler, { query: { code: 'zzzzzz' } })).status, 404);
+  const longCode = 'oldcode123';
+  await (await db())`INSERT INTO hamgera_rx_events (id, code, title, segments, survey_version) VALUES ('legacy-1', ${longCode}, 'قدیمی', '[]'::jsonb, '1.0')`;
+  equal('public: links made with the earlier 10-character codes still work', (await call(surveyHandler, { query: { code: longCode } })).body.title, 'قدیمی');
   equal('public: malformed code → 404', (await call(surveyHandler, { query: { code: "x'; DROP" } })).status, 404);
 
   const submit = (over: Record<string, unknown> = {}) => call(surveyHandler, { method: 'POST', body: { code, ...payload(), ...over } });

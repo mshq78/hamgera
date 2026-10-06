@@ -81,13 +81,21 @@ export default endpoint(async (req, res) => {
     case 'createEvent': {
       const e = eventInput(b);
       const id = newId();
-      const code = newEventCode();
-      await sql`
-        INSERT INTO hamgera_rx_events (id, code, title, event_date, cohort, location, segments, is_active, opens_at, closes_at, survey_version)
-        VALUES (${id}, ${code}, ${e.title}, ${e.eventDate}::date, ${e.cohort}, ${e.location}, ${JSON.stringify(e.segments)}::jsonb, ${e.isActive}, ${e.opensAt}::timestamptz, ${e.closesAt}::timestamptz, ${SURVEY_VERSION})
-      `;
-      await audit('create_event', id, null, null, e);
-      return { ok: true, id, code };
+      // Short codes can collide: the unique index decides, and we simply draw another one.
+      for (let attempt = 0; ; attempt++) {
+        const code = newEventCode();
+        const rows = await sql`
+          INSERT INTO hamgera_rx_events (id, code, title, event_date, cohort, location, segments, is_active, opens_at, closes_at, survey_version)
+          VALUES (${id}, ${code}, ${e.title}, ${e.eventDate}::date, ${e.cohort}, ${e.location}, ${JSON.stringify(e.segments)}::jsonb, ${e.isActive}, ${e.opensAt}::timestamptz, ${e.closesAt}::timestamptz, ${SURVEY_VERSION})
+          ON CONFLICT (code) DO NOTHING
+          RETURNING code
+        `;
+        if (rows.length > 0) {
+          await audit('create_event', id, null, null, e);
+          return { ok: true, id, code };
+        }
+        if (attempt >= 20) throw new HttpError(500, 'code_exhausted');
+      }
     }
     case 'updateEvent': {
       const before = typeof b.id === 'string' ? await eventById(b.id) : null;
