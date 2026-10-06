@@ -4,6 +4,7 @@ export const CORE = {
   brand: {
     name: 'هم‌گرا',
     tagline: 'سامانهٔ یکپارچهٔ آزمون‌های شناخت و توسعه',
+    campus: 'پردیس نوآوری گرا',
   },
   common: {
     close: 'بستن',

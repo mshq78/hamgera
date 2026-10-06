@@ -41,7 +41,7 @@ export const LoginScreen: React.FC = () => {
   return (
     <div className="w-full flex flex-col items-center gap-5 py-4">
       <header className="w-full flex flex-col items-center text-center gap-3">
-        <img src="/logo.svg" alt="" aria-hidden="true" className="w-24 h-24 object-contain" />
+        <img src="/logo.png" alt="" aria-hidden="true" className="w-24 h-24 object-contain" />
         <h1 className="text-3xl font-extrabold tracking-tight text-slate-900 dark:text-amber-100">{CORE.brand.name}</h1>
         <p className="text-sm text-slate-500 dark:text-slate-400">{CORE.brand.tagline}</p>
       </header>
