@@ -1,0 +1,50 @@
+/* Colours of the reaction dashboard. Defined as roles so light and dark swap in one place.
+   Bars use one blue (a single magnitude); the stacked scales use the diverging pair blue ↔ red around a gray midpoint. */
+.viz-root {
+  color-scheme: light;
+  --viz-surface: #ffffff;
+  --viz-ink: #0b0b0b;
+  --viz-ink-2: #52514e;
+  --viz-ink-3: #6b6a66;
+  --viz-grid: #e4e3df;
+  --viz-bar: #2a78d6;
+  --viz-top: #2a78d6;
+  --viz-neutral: #cfcec9;
+  --viz-bottom: #e34948;
+  --viz-warn: #fab219;
+  --viz-good: #0ca30c;
+  --viz-serious: #ec835a;
+  --viz-critical: #d03b3b;
+  print-color-adjust: exact;
+  -webkit-print-color-adjust: exact;
+}
+html.dark .viz-root {
+  color-scheme: dark;
+  --viz-surface: #11263f;
+  --viz-ink: #faf4e6;
+  --viz-ink-2: #cbd5e1;
+  --viz-ink-3: #8ea4be;
+  --viz-grid: #1e3b5e;
+  --viz-bar: #3987e5;
+  --viz-top: #3987e5;
+  --viz-neutral: #4a5d75;
+  --viz-bottom: #e66767;
+}
+/* A printed report is always light, whatever the screen theme is. */
+@media print {
+  .viz-root {
+    --viz-surface: #ffffff;
+    --viz-ink: #0b0b0b;
+    --viz-ink-2: #52514e;
+    --viz-ink-3: #6b6a66;
+    --viz-grid: #e4e3df;
+    --viz-bar: #2a78d6;
+    --viz-top: #2a78d6;
+    --viz-neutral: #cfcec9;
+    --viz-bottom: #e34948;
+  }
+  .viz-card { break-inside: avoid; page-break-inside: avoid; }
+  @page { size: A4; margin: 12mm; }
+}
+.print-only { display: none; }
+@media print { .print-only { display: block; } }

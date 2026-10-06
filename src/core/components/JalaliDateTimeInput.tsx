@@ -1,7 +1,7 @@
 import React from 'react';
 import { ADMIN } from '../content/admin.fa';
 import { toPersianDigits } from '../utils/number';
-import { JALALI_MONTHS, JalaliDateTime, formatTehran, instantToJalali, jalaliMonthLength, jalaliToInstant } from '../utils/jalali';
+import { JALALI_MONTHS, JalaliDateTime, formatTehran, formatTehranDate, instantToJalali, jalaliMonthLength, jalaliToInstant } from '../utils/jalali';
 import { Button } from './Button';
 
 const t = ADMIN.schedule;
@@ -18,15 +18,17 @@ interface Props {
   disabled?: boolean;
   /** When no time is set yet, «تعیین زمان» starts one hour after this instant (default: now). */
   startFrom?: string | null;
+  /** Only the day matters (hour and minute are hidden and fixed at noon). */
+  dateOnly?: boolean;
 }
 
 /** Picks a Jalali date and a time on the Tehran clock; the value is the matching UTC instant. */
-export const JalaliDateTimeInput: React.FC<Props> = ({ label, value, onChange, optional = false, disabled = false, startFrom = null }) => {
+export const JalaliDateTimeInput: React.FC<Props> = ({ label, value, onChange, optional = false, disabled = false, startFrom = null, dateOnly = false }) => {
   const parts = value ? instantToJalali(value) : null;
 
   const commit = (next: JalaliDateTime) => {
     const day = Math.min(next.jd, jalaliMonthLength(next.jy, next.jm));
-    onChange(jalaliToInstant({ ...next, jd: day }));
+    onChange(jalaliToInstant({ ...next, jd: day, ...(dateOnly ? { hour: 12, minute: 0 } : {}) }));
   };
 
   if (!parts) {
@@ -66,19 +68,19 @@ export const JalaliDateTimeInput: React.FC<Props> = ({ label, value, onChange, o
         <select aria-label={t.year} className={selectClass} value={parts.jy} onChange={(e) => commit({ ...parts, jy: Number(e.target.value) })}>
           {[...years].sort((a, b) => a - b).map((y) => <option key={y} value={y}>{toPersianDigits(y)}</option>)}
         </select>
-        <span className="text-xs text-slate-500 dark:text-slate-400">{t.hour}</span>
-        <select aria-label={t.hour} className={selectClass} value={parts.hour} onChange={(e) => commit({ ...parts, hour: Number(e.target.value) })}>
+        {!dateOnly && <span className="text-xs text-slate-500 dark:text-slate-400">{t.hour}</span>}
+        {!dateOnly && <select aria-label={t.hour} className={selectClass} value={parts.hour} onChange={(e) => commit({ ...parts, hour: Number(e.target.value) })}>
           {Array.from({ length: 24 }, (_, h) => <option key={h} value={h}>{toPersianDigits(String(h).padStart(2, '0'))}</option>)}
-        </select>
-        <span aria-hidden="true">:</span>
-        <select aria-label={t.minute} className={selectClass} value={parts.minute} onChange={(e) => commit({ ...parts, minute: Number(e.target.value) })}>
+        </select>}
+        {!dateOnly && <span aria-hidden="true">:</span>}
+        {!dateOnly && <select aria-label={t.minute} className={selectClass} value={parts.minute} onChange={(e) => commit({ ...parts, minute: Number(e.target.value) })}>
           {Array.from({ length: 60 }, (_, m) => <option key={m} value={m}>{toPersianDigits(String(m).padStart(2, '0'))}</option>)}
-        </select>
+        </select>}
         {optional && (
           <Button variant="ghost" size="sm" onClick={() => onChange(null)}>{t.clearTime}</Button>
         )}
       </div>
-      <p className="text-[11px] text-slate-500 dark:text-slate-400">{formatTehran(value!)} · {t.tehranTime}</p>
+      <p className="text-[11px] text-slate-500 dark:text-slate-400">{dateOnly ? formatTehranDate(value!) : `${formatTehran(value!)} · ${t.tehranTime}`}</p>
     </fieldset>
   );
 };

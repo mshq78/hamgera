@@ -3,11 +3,13 @@ import { Lock, RefreshCw } from 'lucide-react';
 import { api, AdminTest, RosterUser } from '../services/api';
 import { ADMIN } from '../content/admin.fa';
 import { Button } from '../components/Button';
+import { LoadingSkeleton } from '../components/StateViews';
 import { SchedulePanel } from './SchedulePanel';
 import { UsersPanel } from './UsersPanel';
 import { ResultsPanel } from './ResultsPanel';
+const ReactionPanel = React.lazy(() => import('@/survey/admin/ReactionPanel').then((m) => ({ default: m.ReactionPanel })));
 
-type Tab = 'tests' | 'users' | 'results';
+type Tab = 'tests' | 'users' | 'results' | 'reaction';
 
 /** The admin password lives only in this component's memory; closing the tab logs the admin out. */
 export const AdminView: React.FC = () => {
@@ -91,11 +93,12 @@ export const AdminView: React.FC = () => {
     { id: 'tests', label: ADMIN.tabTests },
     { id: 'users', label: ADMIN.tabUsers },
     { id: 'results', label: ADMIN.tabResults },
+    { id: 'reaction', label: ADMIN.tabReaction },
   ];
 
   return (
     <div className="w-full space-y-5">
-      <header className="flex items-center justify-between gap-3">
+      <header className="no-print flex items-center justify-between gap-3">
         <h1 className="text-xl font-extrabold text-slate-900 dark:text-amber-100">{ADMIN.title}</h1>
         <div className="flex items-center gap-2">
           <Button variant="outline" size="sm" isLoading={refreshing} leftIcon={<RefreshCw className="w-3.5 h-3.5" />} onClick={refresh}>{ADMIN.refresh}</Button>
@@ -103,7 +106,7 @@ export const AdminView: React.FC = () => {
         </div>
       </header>
 
-      <div role="tablist" className="flex flex-wrap gap-2">
+      <div role="tablist" className="no-print flex flex-wrap gap-2">
         {tabs.map((x) => (
           <button
             key={x.id}
@@ -124,6 +127,11 @@ export const AdminView: React.FC = () => {
       {tab === 'tests' && <SchedulePanel tests={tests} adminPassword={password} onChanged={refresh} />}
       {tab === 'users' && <UsersPanel adminPassword={password} users={users} onChanged={refresh} />}
       {tab === 'results' && <ResultsPanel adminPassword={password} />}
+      {tab === 'reaction' && (
+        <React.Suspense fallback={<LoadingSkeleton lines={3} />}>
+          <ReactionPanel adminPassword={password} />
+        </React.Suspense>
+      )}
     </div>
   );
 };

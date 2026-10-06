@@ -5,8 +5,9 @@ import { runServerImports } from './serverImports.js';
 import { runMasirnama } from './masirnama.js';
 import { runNaghshnama } from './naghshnama.js';
 import { runTasmimnama } from './tasmimnama.js';
+import { runReaction, runReactionExports } from './reaction.js';
 
-const results = [...(await runUnit()), ...runServerImports(), ...runJalali(), ...runMasirnama(), ...runNaghshnama(), ...runTasmimnama(), ...(await runApi())];
+const results = [...(await runUnit()), ...runServerImports(), ...runJalali(), ...runMasirnama(), ...runNaghshnama(), ...runTasmimnama(), ...(await runApi()), ...(await runReaction()), ...(await runReactionExports())];
 results.filter((r) => !r.passed).forEach((r) => console.error(`FAIL: ${r.name} -> ${r.message}`));
 const failed = results.filter((r) => !r.passed).length;
 console.log(`${results.length - failed} passed, ${failed} failed`);

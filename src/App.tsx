@@ -10,6 +10,7 @@ import { LoginScreen } from './core/login/LoginScreen';
 import { HubScreen } from './core/hub/HubScreen';
 import { TestHost } from './core/hub/TestHost';
 
+const SurveyPage = lazy(() => import('./survey/SurveyPage'));
 const AdminView = lazy(() => import('./core/admin/AdminView').then((m) => ({ default: m.AdminView })));
 
 /** Everything except the login page and the admin panel needs a logged-in participant. */
@@ -20,12 +21,14 @@ const RequireAuth: React.FC<{ children: React.ReactNode }> = ({ children }) => {
 
 const AppRoutes: React.FC = () => {
   const { pathname } = useLocation();
+  const isSurvey = pathname.startsWith('/s/');
   return (
-    <PageShell wide={pathname === '/admin'} compactHeader={pathname === '/admin'}>
+    <PageShell wide={pathname === '/admin'} compactHeader={pathname === '/admin' || isSurvey} minimal={isSurvey}>
       <Suspense fallback={<LoadingSkeleton lines={5} />}>
         <Routes>
           <Route path="/login" element={<LoginScreen />} />
           <Route path="/admin" element={<AdminView />} />
+          <Route path="/s/:code" element={<SurveyPage />} />
           <Route path="/" element={<RequireAuth><HubScreen /></RequireAuth>} />
           <Route path="/t/:testId/*" element={<RequireAuth><TestHost /></RequireAuth>} />
           <Route path="*" element={<Navigate to="/" replace />} />

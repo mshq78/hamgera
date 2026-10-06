@@ -13,6 +13,8 @@ interface PageShellProps {
   compactHeader?: boolean;
   /** Wider column for admin tables. */
   wide?: boolean;
+  /** Anonymous pages (event surveys): no account controls and no link to the admin panel. */
+  minimal?: boolean;
 }
 
 function useOnline() {
@@ -30,7 +32,7 @@ function useOnline() {
   return online;
 }
 
-export const PageShell: React.FC<PageShellProps> = ({ children, compactHeader = false, wide = false }) => {
+export const PageShell: React.FC<PageShellProps> = ({ children, compactHeader = false, wide = false, minimal = false }) => {
   const { user, logout } = useAuth();
   const { progress, sync, testTitle } = useShell();
   const online = useOnline();
@@ -68,7 +70,7 @@ export const PageShell: React.FC<PageShellProps> = ({ children, compactHeader = 
               )}
             </div>
 
-            {user && (
+            {user && !minimal && (
               <button
                 type="button"
                 onClick={logout}
@@ -91,9 +93,11 @@ export const PageShell: React.FC<PageShellProps> = ({ children, compactHeader = 
       <footer className="w-full py-4 px-4 text-center text-[11px] text-slate-500 dark:text-slate-400 border-t border-slate-200/60 dark:border-slate-800/60 no-print">
         <div className={`${width} mx-auto flex items-center justify-between`}>
           <span>{CORE.brand.name} · {CORE.brand.campus}</span>
-          <a href="#/admin" className="hover:text-amber-500 dark:hover:text-amber-300 transition-colors">
-            {CORE.common.adminLogin}
-          </a>
+          {!minimal && (
+            <a href="#/admin" className="hover:text-amber-500 dark:hover:text-amber-300 transition-colors">
+              {CORE.common.adminLogin}
+            </a>
+          )}
         </div>
       </footer>
     </div>

@@ -43,6 +43,8 @@ const routes: Record<string, () => Promise<{ default: (req: any, res: any) => Pr
   tests: () => import('../api/tests.js'),
   sessions: () => import('../api/sessions.js'),
   analysis: () => import('../api/analysis.js'),
+  survey: () => import('../api/survey.js'),
+  reaction: () => import('../api/reaction.js'),
 };
 
 const server = http.createServer(async (req, res) => {

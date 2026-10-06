@@ -102,15 +102,36 @@ const FA_DIGITS = '۰۱۲۳۴۵۶۷۸۹';
 const fa = (n: number | string) => String(n).replace(/[0-9]/g, (d) => FA_DIGITS[+d]);
 
 /**
- * «سه‌شنبه ۱۵ مهر ۱۴۰۵، ساعت ۱۰:۳۰» on the Tehran clock. Built from the Jalali parts instead of Intl so the word
- * order and digits are identical in every browser.
+ * «سه‌شنبه ۱۵ مهر ۱۴۰۵» on the Tehran clock. Built from the Jalali parts instead of Intl so the word order and
+ * digits are identical in every browser.
  */
-export function formatTehran(iso: string, withWeekday = true): string {
+export function formatTehranDate(iso: string, withWeekday = true): string {
   const ms = Date.parse(iso);
   if (Number.isNaN(ms)) return iso;
   const t = tehranParts(ms);
   const [jy, jm, jd] = gregorianToJalali(t.y, t.m, t.d);
   const weekday = WEEKDAYS[new Date(Date.UTC(t.y, t.m - 1, t.d)).getUTCDay()];
+  return `${withWeekday ? weekday + ' ' : ''}${fa(jd)} ${JALALI_MONTHS[jm - 1]} ${fa(jy)}`;
+}
+
+/** «سه‌شنبه ۱۵ مهر ۱۴۰۵، ساعت ۱۰:۳۰» on the Tehran clock. */
+export function formatTehran(iso: string, withWeekday = true): string {
+  const ms = Date.parse(iso);
+  if (Number.isNaN(ms)) return iso;
+  const t = tehranParts(ms);
   const time = `${String(t.h).padStart(2, '0')}:${String(t.mi).padStart(2, '0')}`;
-  return `${withWeekday ? weekday + ' ' : ''}${fa(jd)} ${JALALI_MONTHS[jm - 1]} ${fa(jy)}، ساعت ${fa(time)}`;
+  return `${formatTehranDate(iso, withWeekday)}، ساعت ${fa(time)}`;
+}
+
+/** A calendar day ("2026-10-10") as the instant of noon in Tehran, for the date pickers. */
+export function dayToInstant(day: string): string {
+  const [y, m, d] = day.split('-').map(Number);
+  const [jy, jm, jd] = gregorianToJalali(y, m, d);
+  return jalaliToInstant({ jy, jm, jd, hour: 12, minute: 0 });
+}
+
+/** The Tehran calendar day ("YYYY-MM-DD", Gregorian) of an instant. */
+export function instantToDay(iso: string): string {
+  const t = tehranParts(Date.parse(iso));
+  return `${t.y}-${String(t.m).padStart(2, '0')}-${String(t.d).padStart(2, '0')}`;
 }
