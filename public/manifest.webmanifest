@@ -1,0 +1,12 @@
+{
+  "name": "هم‌گرا",
+  "short_name": "هم‌گرا",
+  "description": "سامانهٔ یکپارچهٔ آزمون‌های شناخت و توسعه",
+  "start_url": "/",
+  "display": "standalone",
+  "dir": "rtl",
+  "lang": "fa",
+  "background_color": "#0E2340",
+  "theme_color": "#0E2340",
+  "icons": [{ "src": "/logo.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }]
+}

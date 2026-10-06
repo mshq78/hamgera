@@ -1,0 +1,188 @@
+import { QUESTIONS } from '../src/tests/masirnama/questions.js';
+import { countChars, clipToMaxChars } from '../src/tests/masirnama/countChars.js';
+import { UI_STRINGS, CONSENT_TEXT } from '../src/tests/masirnama/content/ui.fa.js';
+import { parseParticipantRows } from '../src/core/utils/participants.js';
+import { normalizeIranMobile, normalizeNationalId } from '../shared/validation.js';
+import { sanitizeMasirnama, MASIRNAMA_QUESTION_IDS } from '../api/_lib/tests/masirnama.js';
+import {
+  CODES, COMPOSITE_WEIGHTS, QUESTION_SPECS, INDICATORS, Code, QuestionRating, AnswerInput,
+  buildResult, compositeLevel, repeatedAnswerQuestions, behaviourSignals, rulesRate, rulesAnalyze, validateManualRatings, normalizeFa,
+} from '../api/_lib/tests/masirnama.analysis.js';
+import { createChecker } from './harness.js';
+
+const ALLOWED_QUESTION_KEYS = new Set(['id', 'text', 'minChars', 'maxChars', 'order']);
+
+// Terms that must NEVER reach the participant-facing client. Kept here (Node-only) so this list is not bundled either.
+const FORBIDDEN_TOKENS = ['FCI', 'rubric', 'dimension', 'weight', 'تداوم مسیر'];
+
+/** مسیرنما: counting rules, question bank, server-side analysis engine and the submission sanitiser. */
+export function runMasirnama() {
+  const { results, check } = createChecker();
+
+  // ================= participant-side logic =================
+
+  // --- countChars -----------------------------------------------------------
+  check('countChars: empty string', countChars('').count === 0);
+  check('countChars: newlines are excluded', countChars('سلام\nدنیا\r\n').count === countChars('سلامدنیا').count);
+  check('countChars: edges are trimmed', countChars('  سلام  ').count === 4);
+  check('countChars: whitespace runs collapse to one space', countChars('الف    ب\t\tج').normalized === 'الف ب ج');
+  check('countChars: 3+ identical punctuation collapse to one', countChars('خوب!!!!!').normalized === 'خوب!');
+  check('countChars: 2 identical punctuation are kept', countChars('خوب..').normalized === 'خوب..');
+  check('countChars: Persian question marks collapse', countChars('چرا؟؟؟؟').normalized === 'چرا؟');
+  const long = 'الف '.repeat(200);
+  check(
+    'clipToMaxChars never exceeds the cap',
+    countChars(clipToMaxChars(long, 50)).count <= 50,
+    `got ${countChars(clipToMaxChars(long, 50)).count}`
+  );
+  check('clipToMaxChars keeps short text untouched', clipToMaxChars('کوتاه', 50) === 'کوتاه');
+
+  // --- login validation -----------------------------------------------------
+  check('mobile: 09 format accepted', normalizeIranMobile('09123456789') === '09123456789');
+  check('mobile: Persian digits accepted', normalizeIranMobile('۰۹۱۲۳۴۵۶۷۸۹') === '09123456789');
+  check('mobile: +98 and bare 9… normalise', normalizeIranMobile('+989123456789') === '09123456789' && normalizeIranMobile('9123456789') === '09123456789');
+  check('mobile: too short / non-mobile rejected', normalizeIranMobile('0912345678') === null && normalizeIranMobile('02112345678') === null);
+  check('national ID: valid checksum accepted', normalizeNationalId('0499370899') === '0499370899');
+  check('national ID: Persian digits accepted', normalizeNationalId('۰۴۹۹۳۷۰۸۹۹') === '0499370899');
+  check('national ID: wrong checksum rejected', normalizeNationalId('0499370890') === null);
+  check('national ID: repeated digits rejected', normalizeNationalId('1111111111') === null);
+  check('national ID: wrong length rejected', normalizeNationalId('049937089') === null);
+
+  // --- participant roster import ---------------------------------------------
+  const sample = parseParticipantRows([
+    ['ردیف', 'نام', 'نام خانوادگي', 'کد ملي', 'تلفن همراه'],
+    [1, 'علی', 'رضایي', '0499370899', '09123456789'],
+    [2, 'سارا', 'محمدي', 499370899, 9123456780], // numeric cells lost their leading zeros
+    [3, 'بدون', 'موبایل', '0499370899', '123'],
+    [4, 'کد', 'نادرست', '0499370890', '09121111111'],
+    [5, 'تکراری', 'شماره', '0499370899', '09123456789'],
+    [null, null, null, null, null],
+  ]);
+  check('import: valid rows parsed', sample.valid.length === 2, `got ${sample.valid.length}`);
+  check('import: Arabic yeh/kaf normalised', sample.valid[0]?.lastName === 'رضایی');
+  check('import: numeric cells get leading zeros back', sample.valid[1]?.nationalId === '0499370899' && sample.valid[1]?.mobile === '09123456780');
+  check(
+    'import: bad mobile / national ID / duplicate reported with row numbers',
+    sample.errors.map((e) => `${e.row}:${e.reason}`).join() === '4:mobile,5:national_id,6:duplicate',
+    sample.errors.map((e) => `${e.row}:${e.reason}`).join()
+  );
+  check('import: missing columns reported', parseParticipantRows([['نام', 'کد ملی'], ['الف', '1']]).missingColumns.join() === 'lastName,mobile');
+  check('import: unrelated columns ignored', parseParticipantRows([['x', 'نام', 'نام خانوادگی', 'کد ملی', 'موبایل', 'y'], [1, 'الف', 'ب', '0499370899', '09123456789', 2]]).valid.length === 1);
+
+  // --- question bank / no-leak ---------------------------------------------
+  check('Question count is exactly 12', QUESTIONS.length === 12, `got ${QUESTIONS.length}`);
+  QUESTIONS.forEach((q, idx) => {
+    const extra = Object.keys(q).filter((k) => !ALLOWED_QUESTION_KEYS.has(k));
+    check(`${q.id}: only allowed keys`, extra.length === 0, `extra keys: ${extra.join(', ')}`);
+    check(`${q.id}: order matches index+1`, q.order === idx + 1, `expected ${idx + 1}, got ${q.order}`);
+    check(`${q.id}: 0 < minChars < maxChars`, q.minChars > 0 && q.maxChars > q.minChars);
+  });
+
+
+  // ================= server-side analysis engine =================
+
+  const distinct = [
+    'وقتی مشتری از نتیجه کار راضی بود و تیم جشن کوچکی گرفت', 'سراغ یادگیری یک ابزار تحلیل داده می‌روم', 'گزارش‌های ماهانه را دقیق بازبینی می‌کنم',
+    'ارتباط بین واحدها ضعیف می‌شود و کارها دیر انجام می‌شود', 'مدیر یک تیم کوچک شده باشم', 'تصمیم‌ها خیلی کند گرفته می‌شود',
+    'پروژه نوسازی انبار با مشارکت من به پایان رسیده باشد', 'اینجا فرصت آزمایش ایده جدید وجود دارد', 'آزادی عمل و امکان یادگیری مهم‌ترین عامل است',
+    'به عنوان متخصص بهینه‌سازی فرایندها شناخته شوم', 'نبود شنیده شدن صدای کارکنان', 'دوره‌ای که مهارت رهبری را یاد گرفتم',
+  ];
+  const answers: AnswerInput[] = QUESTION_SPECS.map((q, i) => ({ questionId: q.id, text: distinct[i], clientMeta: { activeTimeMs: 60000 } }));
+  const rateAll = (score: number | ((q: string, c: Code) => number), unusable: string[] = []): QuestionRating[] =>
+    QUESTION_SPECS.map((q) =>
+      unusable.includes(q.id)
+        ? { questionId: q.id, usable: false, flag: 'irrelevant', ratings: [] }
+        : {
+            questionId: q.id, usable: true, flag: 'ok',
+            ratings: (Object.keys(q.weights) as Code[]).map((c) => ({
+              code: c, score: typeof score === 'number' ? score : score(q.id, c), evidence: 'شاهد', confidence: 0.9,
+            })),
+          }
+    );
+  const meta = { model: 'test', createdAt: '2026-01-01T00:00:00Z' };
+
+  // --- confidentiality: nothing about the indicators in client-visible content ---
+  const shipped = JSON.stringify({ QUESTIONS, UI_STRINGS, CONSENT_TEXT }).toLowerCase();
+  FORBIDDEN_TOKENS.forEach((tok) => check(`No forbidden token "${tok}" in client content`, !shipped.includes(tok.toLowerCase())));
+  Object.values(INDICATORS).forEach((i) => check(`Indicator title "${i.title}" is not in client content`, !shipped.includes(i.title.toLowerCase())));
+
+  // --- instrument definition vs the content spec ---
+  check('12 question specs match src/questions.ts texts', QUESTION_SPECS.length === 12 && QUESTION_SPECS.every((q, i) => q.text === QUESTIONS[i].text && q.id === QUESTIONS[i].id));
+  check('composite weights sum to 1', Math.abs(Object.values(COMPOSITE_WEIGHTS).reduce((a, b) => a! + b!, 0)! - 1) < 1e-9);
+  check('every indicator is linked to at least 2 questions', CODES.every((c) => QUESTION_SPECS.filter((q) => q.weights[c]).length >= 2));
+  const w = (id: string) => JSON.stringify(QUESTION_SPECS.find((q) => q.id === id)!.weights);
+  check('Q07 weights A2 F2 M1 O1', w('Q07') === JSON.stringify({ A: 2, F: 2, M: 1, O: 1 }));
+  check('Q12 weights F2 G2 A2 M1', w('Q12') === JSON.stringify({ F: 2, G: 2, A: 2, M: 1 }));
+
+  // --- scoring formula ---
+  const all4 = buildResult(answers, rateAll(4), meta);
+  check('all 4 → every indicator 100 and composite 100', all4.indicators.every((i) => i.score === 100) && all4.composite.score === 100);
+  const all2 = buildResult(answers, rateAll(2), meta);
+  check('all 2 → every indicator 50, composite 50 (fragile)', all2.indicators.every((i) => i.score === 50) && all2.composite.score === 50 && all2.composite.levelCode === 'fragile');
+  const all3 = buildResult(answers, rateAll(3), meta);
+  check('all 3 → 75 each, composite 75 (conditional)', all3.composite.score === 75 && all3.composite.levelCode === 'conditional');
+  // E appears in Q1(w2) Q2(w2) Q5(w1) Q6(w1) Q11(w1): scores 4,0,2,4,0 → (8+0+2+4+0)/(4*7)=14/28=50
+  const mixed = buildResult(answers, rateAll((q, c) => (c === 'E' ? ({ Q01: 4, Q02: 0, Q05: 2, Q06: 4, Q11: 0 } as Record<string, number>)[q] : 4)), meta);
+  check('indicator formula Σ(score×weight)÷(4×Σweight)×100', mixed.indicators.find((i) => i.code === 'E')!.score === 50, `got ${mixed.indicators.find((i) => i.code === 'E')!.score}`);
+  const expectedFci = 0.1 * 50 + 0.15 * 100 + 0.15 * 100 + 0.25 * 100 + 0.35 * 100;
+  check('composite = E×.10 + M×.15 + G×.15 + A×.25 + F×.35', mixed.composite.score === expectedFci, `got ${mixed.composite.score}, expected ${expectedFci}`);
+
+  // --- composite level boundaries ---
+  check('level boundaries 80/65/50', compositeLevel(80).code === 'strong' && compositeLevel(79.9).code === 'conditional' && compositeLevel(65).code === 'conditional' && compositeLevel(64.9).code === 'fragile' && compositeLevel(50).code === 'fragile' && compositeLevel(49.9).code === 'gap');
+
+  // --- quality control ---
+  const two = buildResult(answers, rateAll(3, ['Q01', 'Q02']), meta);
+  check('2 unscorable questions → still scored, excluded from formulas', two.status === 'ok' && two.composite.score === 75 && two.questions.filter((q) => !q.usable).length === 2);
+  const three = buildResult(answers, rateAll(3, ['Q01', 'Q02', 'Q03']), meta);
+  check('more than 2 unscorable → insufficient data, no scores', three.status === 'insufficient_data' && three.composite.score === null && three.indicators.every((i) => i.score === null));
+  const rep = QUESTION_SPECS.map((q) => ({ questionId: q.id, text: 'من همیشه دوست دارم رشد کنم و مهارت‌های جدید یاد بگیرم' }));
+  check('near-identical answers in >3 questions are flagged for human review', repeatedAnswerQuestions(rep).length === 12 && buildResult(rep, rateAll(3), meta).flags.some((f) => f.includes('تکراری')));
+  check('distinct answers are not flagged as repetition', repeatedAnswerQuestions(answers).length === 0);
+  check('behaviour signals (fast / paste / edits) never affect scores', buildResult(answers.map((a) => ({ ...a, clientMeta: { activeTimeMs: 1000, pastedChars: 500, editCount: 9 } })), rateAll(3), meta).composite.score === 75
+    && behaviourSignals({ questionId: 'Q01', text: 'x'.repeat(100), clientMeta: { activeTimeMs: 1000, pastedChars: 100, editCount: 9 } }).length === 3);
+  const thin = buildResult(answers, rateAll(3, ['Q03', 'Q04', 'Q01']).map((r) => r), meta);
+  check('thin evidence is flagged per indicator', thin.status === 'insufficient_data' || thin.indicators.some((i) => i.thinEvidence));
+
+  // --- rule-based estimate (no AI) ---
+  const q1 = QUESTION_SPECS[0];
+  const rich = rulesRate(q1, 'پروژه نوسازی را با مشتری به نتیجه رساندیم و اثر آن را دیدم؛ انرژی و انگیزه گرفتم و ارزش کارم برایم معنا پیدا کرد.');
+  const poor = rulesRate(q1, 'خسته بودم و کار فقط وظیفه بود و بی‌انگیزه به خانه رفتم و هیچ ارزشی ندیدم');
+  const score = (r: QuestionRating, c: Code) => r.ratings.find((x) => x.code === c)!.score;
+  check('rules: concrete, meaningful answer scores higher than a flat one on M and E', rich.usable && poor.usable && score(rich, 'M') > score(poor, 'M') && score(rich, 'E') > score(poor, 'E'), `rich M${score(rich, 'M')} E${score(rich, 'E')} / poor M${score(poor, 'M')} E${score(poor, 'E')}`);
+  check('rules: gibberish is not scorable', !rulesRate(q1, 'الف الف الف الف الف الف الف').usable);
+  check('rules: very short answer is not scorable', !rulesRate(q1, 'خوب بود').usable);
+  check('rules: answer unrelated to the lexicon is flagged irrelevant', rulesRate(q1, 'امروز هوا آفتابی است و کبوترها روی بام نشسته‌اند').flag === 'irrelevant');
+  const leaving = rulesRate(QUESTION_SPECS[11], 'فکر می‌کنم این دوره موقت است و بعد از آن به فرصت بهتر در جای دیگر می‌روم و استعفا می‌دهم');
+  const staying = rulesRate(QUESTION_SPECS[11], 'در آینده نقش بزرگ‌تری در سازمان دارم و رشد می‌کنم و سهم مشخصی در مسیر شرکت خواهم داشت');
+  check('rules: leaving cues lower F, bond cues raise it', leaving.usable && staying.usable && score(staying, 'F') > score(leaving, 'F'));
+  check('rules: confidence is always low (≤ 0.5)', [rich, poor, staying].every((r) => r.ratings.every((x) => x.confidence <= 0.5)));
+  const rulesOut = buildResult(answers, rulesAnalyze(answers), { ...meta, method: 'rules' });
+  check('rules: result is labelled as a rough estimate and carries the warning flag', rulesOut.method === 'rules' && rulesOut.flags.some((f) => f.includes('تقریبی')));
+  check('normalizeFa unifies yeh/kaf, digits and half-spaces', normalizeFa('می‌خواهم ۱۲ كتاب ي') === 'میخواهم 12 کتاب ی');
+
+  // --- manual ratings ---
+  const manualOk = QUESTION_SPECS.map((q) => ({ questionId: q.id, usable: true, ratings: (Object.keys(q.weights) as Code[]).map((c) => ({ code: c, score: 3, evidence: 'شاهد' })) }));
+  const parsedManual = validateManualRatings(manualOk);
+  check('manual: valid ratings accepted and fed to the same engine', !!parsedManual && buildResult(answers, parsedManual, { ...meta, method: 'manual' }).composite.score === 75);
+  check('manual: missing indicator rejected', validateManualRatings(manualOk.map((m, i) => (i === 0 ? { ...m, ratings: m.ratings.slice(1) } : m))) === null);
+  check('manual: score out of range rejected', validateManualRatings(manualOk.map((m, i) => (i === 0 ? { ...m, ratings: m.ratings.map((r) => ({ ...r, score: 5 })) } : m))) === null);
+  check('manual: wrong number of questions rejected', validateManualRatings(manualOk.slice(1)) === null);
+  const manualUnusable = validateManualRatings(manualOk.map((m, i) => (i < 3 ? { questionId: m.questionId, usable: false, flag: 'too_vague' } : m)));
+  check('manual: >2 unusable questions → insufficient data through the same rules', !!manualUnusable && buildResult(answers, manualUnusable, { ...meta, method: 'manual' }).status === 'insufficient_data');
+
+
+  // ================= submission sanitiser =================
+  const good = {
+    questionSetVersion: '1.0', consentVersion: '1.0', consentAcceptedAt: 'a', startedAt: 's', finishedAt: 'f',
+    answers: MASIRNAMA_QUESTION_IDS.map((id) => ({ questionId: id, text: 'پاسخ', clientMeta: { activeTimeMs: 5, revisions: [{ savedAt: 'x', text: 'y' }] } })),
+  };
+  check('sanitize: valid payload accepted', !!sanitizeMasirnama(good));
+  check('sanitize: unknown fields are dropped', !('evil' in (sanitizeMasirnama({ ...good, evil: 1 }) as object)));
+  check('sanitize: wrong number of answers rejected', sanitizeMasirnama({ ...good, answers: good.answers.slice(1) }) === null);
+  check('sanitize: answers out of order rejected', sanitizeMasirnama({ ...good, answers: [...good.answers].reverse() }) === null);
+  check('sanitize: empty answer rejected', sanitizeMasirnama({ ...good, answers: good.answers.map((a, i) => (i === 0 ? { ...a, text: '  ' } : a)) }) === null);
+  check('sanitize: overlong answer rejected', sanitizeMasirnama({ ...good, answers: good.answers.map((a, i) => (i === 0 ? { ...a, text: 'x'.repeat(1501) } : a)) }) === null);
+  check('sanitize: not an object rejected', sanitizeMasirnama(null) === null && sanitizeMasirnama('x') === null);
+
+  return results;
+}
