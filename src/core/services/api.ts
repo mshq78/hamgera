@@ -61,7 +61,8 @@ export interface StoredSession<D = any, R = any> {
   result: R | null;
 }
 
-export type SubmitFailure = 'offline' | 'closed' | 'already' | 'unauthorized' | 'server';
+/** `tiebreak` = the test needs one more answer before it can be stored (تصمیم‌نما). */
+export type SubmitFailure = 'offline' | 'closed' | 'already' | 'unauthorized' | 'tiebreak' | 'server';
 
 export const api = {
   login: (mobile: string, nationalId: string) => request<LoginData>('/api/auth', { method: 'POST', body: { mobile, nationalId } }),
@@ -73,8 +74,8 @@ export const api = {
   async submit(token: string, body: { testId: TestId; sessionId: string; startedAt: string; payload: unknown }) {
     const res = await request<{ ok: true; result: any | null }>('/api/sessions', { method: 'POST', token, body });
     if (res.ok) return { ok: true as const, result: res.data.result };
-    const reason: SubmitFailure = res.offline ? 'offline' : res.status === 401 ? 'unauthorized' : res.status === 409 ? 'already' : res.status === 403 ? 'closed' : 'server';
-    return { ok: false as const, reason };
+    const reason: SubmitFailure = res.offline ? 'offline' : res.status === 401 ? 'unauthorized' : res.status === 409 ? 'already' : res.status === 403 ? 'closed' : res.status === 422 ? 'tiebreak' : 'server';
+    return { ok: false as const, reason, details: res.body as Record<string, any> | null };
   },
 
   // admin

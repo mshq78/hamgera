@@ -20,7 +20,7 @@ export interface TestRuntimeValue {
   isOffline: boolean;
   newSessionId(): string;
   /** Stores the finished session on the server. `result` is null when the admin does not show results. */
-  submit(args: { sessionId: string; startedAt: string; payload: unknown }): Promise<{ ok: true; result: any | null } | { ok: false; reason: SubmitFailure }>;
+  submit(args: { sessionId: string; startedAt: string; payload: unknown }): Promise<{ ok: true; result: any | null } | { ok: false; reason: SubmitFailure; details: Record<string, any> | null }>;
   /** Leaves the test and returns to the hub. */
   exit(): void;
 }

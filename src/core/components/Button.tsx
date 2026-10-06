@@ -9,6 +9,7 @@ interface ButtonProps extends Omit<HTMLMotionProps<'button'>, 'children'> {
   variant?: ButtonVariant;
   size?: ButtonSize;
   isLoading?: boolean;
+  fullWidth?: boolean;
   leftIcon?: React.ReactNode;
   rightIcon?: React.ReactNode;
   children: React.ReactNode;
@@ -18,6 +19,7 @@ export const Button: React.FC<ButtonProps> = ({
   variant = 'primary',
   size = 'md',
   isLoading = false,
+  fullWidth = false,
   leftIcon,
   rightIcon,
   children,
@@ -49,7 +51,7 @@ export const Button: React.FC<ButtonProps> = ({
       whileHover={!disabled && !isLoading ? { scale: 1.01 } : undefined}
       whileTap={!disabled && !isLoading ? { scale: 0.98 } : undefined}
       disabled={disabled || isLoading}
-      className={`inline-flex items-center justify-center font-medium transition-colors select-none cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-400 disabled:opacity-50 disabled:cursor-not-allowed disabled:pointer-events-none ${sizeClasses[size]} ${variantClasses[variant]} ${className}`}
+      className={`inline-flex items-center justify-center font-medium transition-colors select-none cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-400 disabled:opacity-50 disabled:cursor-not-allowed disabled:pointer-events-none ${sizeClasses[size]} ${variantClasses[variant]} ${fullWidth ? 'w-full' : ''} ${className}`}
       {...props}
     >
       {isLoading ? (

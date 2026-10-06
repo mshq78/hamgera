@@ -4,7 +4,7 @@ export type { VercelRequest, VercelResponse };
 
 /** An expected failure that maps straight to an HTTP status and a stable error code. */
 export class HttpError extends Error {
-  constructor(public readonly status: number, public readonly code: string) {
+  constructor(public readonly status: number, public readonly code: string, public readonly extra: Record<string, unknown> = {}) {
     super(code);
   }
 }
@@ -23,7 +23,7 @@ export function endpoint(fn: Handler) {
       if (!res.writableEnded && out !== undefined) res.status(200).json(out);
     } catch (err: any) {
       if (res.writableEnded) return;
-      if (err instanceof HttpError) return res.status(err.status).json({ error: err.code });
+      if (err instanceof HttpError) return res.status(err.status).json({ ...err.extra, error: err.code });
       console.error(`${req.method} ${req.url} failed`, err);
       return res.status(500).json({ error: 'server_error' });
     }

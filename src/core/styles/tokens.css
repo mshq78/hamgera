@@ -85,3 +85,9 @@ html.dark {
   --card-shadow-hover: 0 14px 34px -4px rgba(0, 0, 0, 0.6), 0 4px 12px -2px rgba(0, 0, 0, 0.4);
   --ring-focus: rgba(242, 193, 78, 0.55);
 }
+
+/* Selection states shared by option lists (used by تصمیم‌نما) */
+:root {
+  --border-selected: var(--accent-gold);
+  --selected-tint: var(--accent-gold-subtle);
+}
