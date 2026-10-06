@@ -25,9 +25,10 @@ const Progress: React.FC<{ step: number }> = ({ step }) => {
 
 /** The questions need a draft; without one (e.g. a direct link) the participant goes back to the intro. */
 const NeedsDraft: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { ready, trackingCode } = useAssessment();
+  const { ready, trackingCode, submitted } = useAssessment();
   if (!ready) return <LoadingSkeleton lines={4} />;
-  if (!trackingCode) return <TestNavigate to="/" replace />;
+  // Once submitted the draft is gone on purpose; the screen that submitted is already navigating onwards.
+  if (!trackingCode && !submitted) return <TestNavigate to="/" replace />;
   return <>{children}</>;
 };
 

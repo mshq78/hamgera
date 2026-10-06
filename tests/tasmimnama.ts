@@ -64,7 +64,7 @@ export function runTasmimnama() {
 
   let ties: HttpError | null = null;
   try { handler.process(payload(split(6))); } catch (e) { ties = e as HttpError; }
-  check('handler: a tie answers 422 with the options that can break it', ties?.status === 422 && ties.code === 'tiebreak_required' && ties.extra.options?.join() === `${tbFor('DAVINCI')},${tbFor('EINSTEIN')}`, JSON.stringify(ties?.extra));
+  check('handler: a tie answers 422 with the options that can break it', ties?.status === 422 && ties.code === 'tiebreak_required' && (ties.extra.options as string[] | undefined)?.join() === `${tbFor('DAVINCI')},${tbFor('EINSTEIN')}`, JSON.stringify(ties?.extra));
   const afterTb = handler.process(payload(split(6), tbFor('DAVINCI')));
   check('handler: the tie-break answer is stored with the session', (afterTb.result as any).characterCode === 'DAVINCI' && (afterTb.data as any).tiebreakAnswer === tbFor('DAVINCI'));
 

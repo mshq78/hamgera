@@ -16,10 +16,12 @@ interface Props {
   /** An optional time can be cleared. */
   optional?: boolean;
   disabled?: boolean;
+  /** When no time is set yet, «تعیین زمان» starts one hour after this instant (default: now). */
+  startFrom?: string | null;
 }
 
 /** Picks a Jalali date and a time on the Tehran clock; the value is the matching UTC instant. */
-export const JalaliDateTimeInput: React.FC<Props> = ({ label, value, onChange, optional = false, disabled = false }) => {
+export const JalaliDateTimeInput: React.FC<Props> = ({ label, value, onChange, optional = false, disabled = false, startFrom = null }) => {
   const parts = value ? instantToJalali(value) : null;
 
   const commit = (next: JalaliDateTime) => {
@@ -36,7 +38,8 @@ export const JalaliDateTimeInput: React.FC<Props> = ({ label, value, onChange, o
           size="sm"
           disabled={disabled}
           onClick={() => {
-            const base = instantToJalali(new Date(Math.ceil((Date.now() + 3600_000) / 3600_000) * 3600_000).toISOString());
+            const from = startFrom ? Date.parse(startFrom) : Date.now();
+            const base = instantToJalali(new Date(Math.ceil((from + 3600_000) / 3600_000) * 3600_000).toISOString());
             commit({ ...base, minute: 0 });
           }}
         >

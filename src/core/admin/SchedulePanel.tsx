@@ -130,7 +130,7 @@ const TestScheduleCard: React.FC<{ test: AdminTest; adminPassword: string; onSav
       {draft.mode === 'scheduled' && (
         <div className="space-y-4 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-800 p-4">
           <JalaliDateTimeInput label={t.opensAt} value={draft.opensAt} onChange={(v) => patch({ opensAt: v })} />
-          <JalaliDateTimeInput label={t.closesAt} value={draft.closesAt} optional onChange={(v) => patch({ closesAt: v })} />
+          <JalaliDateTimeInput label={t.closesAt} value={draft.closesAt} optional startFrom={draft.opensAt} onChange={(v) => patch({ closesAt: v })} />
           {!draft.closesAt && <p className="text-[11px] text-slate-500 dark:text-slate-400">{t.closesOptional}</p>}
           {draft.closesAt && (
             <div>

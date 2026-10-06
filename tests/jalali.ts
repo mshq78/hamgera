@@ -25,6 +25,8 @@ export function runJalali() {
   const iso = jalaliToInstant({ jy: 1405, jm: 7, jd: 15, hour: 10, minute: 30 });
   equal('tehran: 10:30 Tehran is 07:00 UTC', iso, '2026-10-07T07:00:00.000Z');
   equal('tehran: round trip', instantToJalali(iso), { jy: 1405, jm: 7, jd: 15, hour: 10, minute: 30 });
-  check('format: mentions the Jalali month and time', /مهر/.test(formatTehran(iso)) && /۱۰:۳۰/.test(formatTehran(iso)), formatTehran(iso));
+  equal('format: weekday, day, month, year and time', formatTehran(iso), 'چهارشنبه ۱۵ مهر ۱۴۰۵، ساعت ۱۰:۳۰');
+  equal('format: without the weekday', formatTehran(iso, false), '۱۵ مهر ۱۴۰۵، ساعت ۱۰:۳۰');
+  equal('format: midnight in Tehran is 20:30 UTC the day before', formatTehran('2026-03-20T20:30:00Z', false), '۱ فروردین ۱۴۰۵، ساعت ۰۰:۰۰');
   return results;
 }

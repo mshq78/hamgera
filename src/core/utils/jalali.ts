@@ -97,13 +97,20 @@ export function jalaliToInstant(v: JalaliDateTime): string {
   return new Date(guess).toISOString();
 }
 
-/** «سه‌شنبه ۱۵ مهر ۱۴۰۵، ساعت ۱۰:۳۰» in Tehran time. */
+const WEEKDAYS = ['یکشنبه', 'دوشنبه', 'سه‌شنبه', 'چهارشنبه', 'پنجشنبه', 'جمعه', 'شنبه']; // Sunday first (Date#getDay)
+const FA_DIGITS = '۰۱۲۳۴۵۶۷۸۹';
+const fa = (n: number | string) => String(n).replace(/[0-9]/g, (d) => FA_DIGITS[+d]);
+
+/**
+ * «سه‌شنبه ۱۵ مهر ۱۴۰۵، ساعت ۱۰:۳۰» on the Tehran clock. Built from the Jalali parts instead of Intl so the word
+ * order and digits are identical in every browser.
+ */
 export function formatTehran(iso: string, withWeekday = true): string {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return iso;
-  const date = new Intl.DateTimeFormat('fa-IR-u-ca-persian', {
-    timeZone: TEHRAN, weekday: withWeekday ? 'long' : undefined, day: 'numeric', month: 'long', year: 'numeric',
-  }).format(d);
-  const time = new Intl.DateTimeFormat('fa-IR', { timeZone: TEHRAN, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(d);
-  return `${date}، ساعت ${time}`;
+  const ms = Date.parse(iso);
+  if (Number.isNaN(ms)) return iso;
+  const t = tehranParts(ms);
+  const [jy, jm, jd] = gregorianToJalali(t.y, t.m, t.d);
+  const weekday = WEEKDAYS[new Date(Date.UTC(t.y, t.m - 1, t.d)).getUTCDay()];
+  const time = `${String(t.h).padStart(2, '0')}:${String(t.mi).padStart(2, '0')}`;
+  return `${withWeekday ? weekday + ' ' : ''}${fa(jd)} ${JALALI_MONTHS[jm - 1]} ${fa(jy)}، ساعت ${fa(time)}`;
 }

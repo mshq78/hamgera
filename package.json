@@ -9,7 +9,9 @@
     "preview": "vite preview",
     "clean": "rm -rf dist",
     "lint": "tsc --noEmit",
-    "test": "tsx tests/run.ts"
+    "test": "tsx tests/run.ts",
+    "dev:api": "tsx scripts/dev-api.ts",
+    "dev:full": "concurrently -k -n api,web \"npm:dev:api\" \"npm:dev\""
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.131.0",
@@ -32,6 +34,7 @@
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "@vercel/node": "^20.0.0",
+    "concurrently": "^10.0.5",
     "tailwindcss": "^4.3.3",
     "tsx": "^4.21.0",
     "typescript": "^7.0.2"
