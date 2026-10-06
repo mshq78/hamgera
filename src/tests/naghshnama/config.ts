@@ -1,4 +1,4 @@
-import { RoleCode, RoleMeta } from './types';
+import { RoleCode, RoleMeta } from './types.js';
 
 export const INSTRUMENT_VERSION = '1.0';
 

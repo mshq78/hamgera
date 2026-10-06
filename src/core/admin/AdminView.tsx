@@ -38,7 +38,15 @@ export const AdminView: React.FC = () => {
       setPassword(input);
       setInput('');
     } else {
-      setLoginMessage(res.status === 401 ? ADMIN.invalidPassword : res.status === 503 ? ADMIN.passwordNotConfigured : ADMIN.backendUnavailable);
+      setLoginMessage(
+        res.status === 401
+          ? ADMIN.invalidPassword
+          : res.error === 'admin_password_not_configured'
+          ? ADMIN.passwordNotConfigured
+          : res.error === 'database_not_configured'
+          ? ADMIN.databaseNotConfigured
+          : ADMIN.backendUnavailable
+      );
     }
   };
 

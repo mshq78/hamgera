@@ -1,5 +1,5 @@
-import { ItemA, ScenarioB, MiniGameC, RoleCode } from './types';
-import { ROLE_CODES_LIST } from './config';
+import { ItemA, ScenarioB, MiniGameC, RoleCode } from './types.js';
+import { ROLE_CODES_LIST } from './config.js';
 
 export const SECTION_A_ITEMS: ItemA[] = [
   {

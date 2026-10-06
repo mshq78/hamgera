@@ -5,6 +5,7 @@ export const ADMIN = {
   passwordPlaceholder: 'گذرواژه مدیر را وارد کنید',
   invalidPassword: 'گذرواژه نادرست است.',
   passwordNotConfigured: 'گذرواژه مدیر روی سرور تنظیم نشده است (ADMIN_PASSWORD).',
+  databaseNotConfigured: 'دیتابیس روی سرور تنظیم نشده است (DATABASE_URL).',
   backendUnavailable: 'سرور در دسترس نیست. در محیط توسعه از «vercel dev» استفاده کنید.',
   loginButton: 'ورود',
   title: 'پنل مدیریت هم‌گرا',

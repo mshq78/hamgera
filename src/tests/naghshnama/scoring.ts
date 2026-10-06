@@ -6,13 +6,13 @@ import {
   ScoringSummary,
   ScoredRole,
   RoleCategory,
-} from './types';
+} from './types.js';
 import {
   ROLE_CODES_LIST,
   ROLES_METADATA,
   WEIGHTS,
   CATEGORY_LABELS,
-} from './config';
+} from './config.js';
 
 /**
  * Pure scoring calculation engine according to specification section 6.

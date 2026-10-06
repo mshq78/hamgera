@@ -5,8 +5,8 @@ import {
   RQIResult,
   RQILevel,
   RoleCode,
-} from './types';
-import { ROLE_CODES_LIST, RQI_WARNING_NOTE } from './config';
+} from './types.js';
+import { ROLE_CODES_LIST, RQI_WARNING_NOTE } from './config.js';
 
 /**
  * Calculates rank vector with average ranks for tied values.
