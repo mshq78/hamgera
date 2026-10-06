@@ -81,7 +81,10 @@ export async function runReaction() {
   const missing = { ...base.answers } as Record<string, unknown>;
   delete missing.Q13;
   equal('rejects a missing required answer', err({ ...base, answers: missing }), 'invalid_answers');
-  equal('Q27 needs at least one word', [err({ ...base, words: [] }), err({ ...base, words: ['  ', ''] }), err({ ...base, words: undefined })], ['invalid_words', 'invalid_words', 'invalid_words']);
+  equal('Q27 and the open questions are optional: no words, blank words, no field at all', [err({ ...base, words: [] }), err({ ...base, words: ['  ', ''] }), err({ ...base, words: undefined })], ['ok', 'ok', 'ok']);
+  const bare = cleanSubmission({ ...base, words: [], answers: Object.fromEntries(Object.entries(base.answers).filter(([k]) => !['Q23', 'Q24', 'Q25', 'Q26'].includes(k))) }, []) as any;
+  check('a submission with only the ratings is complete (no words, no text)', !bare.error && bare.words.length === 0 && Object.keys(bare.answers).length === 22);
+  equal('the ratings stay mandatory even when the text is left out', err({ ...base, answers: { ...base.answers, Q01: undefined } }), 'invalid_answers');
   equal('Q27 one word is enough; 30 chars max; max three words', [err({ ...base, words: ['یک'] }), (cleanSubmission({ ...base, words: ['x'.repeat(50), 'b', 'c', 'd'] }, []) as any).words.map((w: string) => w.length)], ['ok', [30, 1, 1]]);
   check('open answers are cut at 500 characters', ((cleanSubmission({ ...base, answers: { ...base.answers, Q23: 'ب'.repeat(900) } }, []) as any).answers.Q23 as string).length === 500);
   equal('segment must come from the event list', [err({ ...base, segment: 'ناشناس' }, ['الف']), err({ ...base, segment: 'الف' }, ['الف']), err({ ...base, segment: '' }, ['الف'])], ['invalid_segment', 'ok', 'ok']);
@@ -173,8 +176,17 @@ export async function runReaction() {
   check('audit: keeps before and after values', editLog.before.Q03 === 5 && editLog.after.Q03 === 2 && editLog.responseId === rid);
   equal('unknown response → 404', (await call(reactionHandler, { method: 'POST', headers: ADMIN, body: { action: 'deleteResponse', responseId: 'nope' } })).status, 404);
 
+  // optional text: only the ratings are mandatory
+  const ratingsOnly = Object.fromEntries(LIKERT_IDS.map((id) => [id, 4]).concat([['Q21', 7], ['Q22', 8]]));
+  equal('submit: ratings only (no words, no text) is accepted', (await submit({ responseId: 'resp-0000000000000007', answers: ratingsOnly, words: [] })).body, { ok: true });
+  const bareStored = (await call(reactionHandler, { headers: ADMIN, query: { resource: 'responses', eventIds: eventId } })).body.responses.find((r: any) => r.id === 'resp-0000000000000007');
+  check('a ratings-only response is stored and counted', bareStored && bareStored.words.length === 0 && bareStored.answers.Q23 === undefined && bareStored.answers.Q22 === 8);
+  equal('submit: a missing rating is still refused', (await submit({ responseId: 'resp-0000000000000008', answers: { ...ratingsOnly, Q09: undefined }, words: [] })).body.error, 'invalid_answers');
+  equal('edit: the three words can be cleared', (await edit({ Q27: [] })).body, { ok: true });
+  check('edit: cleared words stay cleared', (await call(reactionHandler, { headers: ADMIN, query: { resource: 'responses', eventIds: eventId } })).body.responses.find((r: any) => r.id === rid).words.length === 0);
+
   const list = (await call(reactionHandler, { headers: ADMIN, query: { resource: 'events' } })).body.events;
-  equal('events list: counts only live responses, shows link status', [list.find((e: any) => e.id === eventId).responses, list.find((e: any) => e.id === eventId).status], [2, 'open']);
+  equal('events list: counts only live responses, shows link status', [list.find((e: any) => e.id === eventId).responses, list.find((e: any) => e.id === eventId).status], [3, 'open']);
 
   return results;
 }

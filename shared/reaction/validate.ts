@@ -23,11 +23,11 @@ export interface CleanSubmission {
   words: string[];
 }
 
-export type SubmissionError = 'invalid_answers' | 'invalid_words' | 'invalid_segment' | 'invalid_time';
+export type SubmissionError = 'invalid_answers' | 'invalid_segment' | 'invalid_time';
 
 /**
  * Validates and rebuilds a submission from known fields only (Q01–Q20: integer 1–5, Q21–Q22: integer 0–10,
- * Q23–Q26: optional text ≤ 500, Q27: one to three words ≤ 30). Returns an error code instead of throwing.
+ * Q23–Q26: optional text ≤ 500, Q27: optional, up to three words ≤ 30). Returns an error code instead of throwing.
  */
 export function cleanSubmission(body: any, allowedSegments: string[]): CleanSubmission | { error: SubmissionError } {
   if (!body || typeof body !== 'object' || !body.answers || typeof body.answers !== 'object') return { error: 'invalid_answers' };
@@ -48,8 +48,8 @@ export function cleanSubmission(body: any, allowedSegments: string[]): CleanSubm
   }
 
   const rawWords: unknown[] = Array.isArray(body.words) ? body.words.slice(0, WORD_COUNT) : [];
+  // Q27 is optional like the other free-text questions: zero to three words.
   const words = rawWords.map((w) => sanitizeText(w, MAX_WORD_CHARS).replace(/\s*\n\s*/g, ' ')).filter(Boolean);
-  if (words.length < 1) return { error: 'invalid_words' };
 
   let segment: string | null = null;
   if (body.segment !== undefined && body.segment !== null && body.segment !== '') {

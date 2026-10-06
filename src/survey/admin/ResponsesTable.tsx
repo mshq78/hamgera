@@ -96,7 +96,7 @@ const EditModal: React.FC<{ response: RxStoredResponse; segments: string[]; admi
     setError('');
     const res = await rxApi.editResponse(adminPassword, response.id, changes);
     setBusy(false);
-    if (!res.ok) return setError(res.error === 'invalid_changes' ? 'مقدار نامعتبر است (حداقل یک واژه برای Q27 لازم است).' : 'ذخیره انجام نشد.');
+    if (!res.ok) return setError(res.error === 'invalid_changes' ? 'مقدار نامعتبر است.' : 'ذخیره انجام نشد.');
     await onSaved();
   };
 

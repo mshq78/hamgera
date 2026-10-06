@@ -37,7 +37,7 @@ const T = {
   submitting: 'در حال ارسال…',
   overallTitle: 'امتیاز کلی و توصیه',
   freeTitle: 'بازخورد آزاد',
-  freeHint: 'نوشتن پاسخ‌های متنی اختیاری است؛ فقط «سه کلمه» حداقل یک واژه می‌خواهد.',
+  freeHint: 'نوشتن پاسخ‌های متنی و «سه کلمه» کاملاً اختیاری است؛ هر کدام را نخواستید خالی بگذارید.',
   charsLeft: 'کاراکتر',
   wordPlaceholder: 'یک کلمه',
   doneTitle: 'پاسخ شما با موفقیت ثبت شد.',
@@ -228,8 +228,7 @@ export default function SurveyPage() {
     const a = draft?.answers ?? {};
     if (id.startsWith('sec-')) return LIKERT_QUESTIONS.filter((q) => q.section === id.slice(4)).every((q) => typeof a[q.id] === 'number');
     if (id === 'overall') return typeof a[OVERALL_ID] === 'number' && typeof a[NPS_ID] === 'number';
-    if (id === 'free') return (draft?.words ?? []).some((w) => w.trim().length > 0);
-    return true;
+    return true; // the free-text step (including the three words) is optional
   };
   const allComplete = steps.every((s) => sectionComplete(s.id));
 

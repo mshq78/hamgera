@@ -152,11 +152,11 @@ export default endpoint(async (req, res) => {
           });
         } else if (qid === WORDS_ID) {
           const words = Array.isArray(value) ? value.slice(0, WORD_COUNT).map((w) => sanitizeText(w, MAX_WORD_CHARS)).filter(Boolean) : [];
-          if (words.length < 1) throw new HttpError(400, 'invalid_changes');
           before[qid] = current?.words ?? [];
           after[qid] = words;
           writes.push(async () => {
             await sql`DELETE FROM hamgera_rx_answers WHERE response_id = ${rid} AND question_id = ${WORDS_ID}`;
+            if (words.length === 0) return;
             const rows = answerRows({}, words);
             await sql`INSERT INTO hamgera_rx_answers (response_id, question_id, text_value, word_index)
                       SELECT ${rid}, x.q, x.t, x.w FROM jsonb_to_recordset(${JSON.stringify(rows)}::jsonb) AS x(q text, n numeric, t text, w int)`;
