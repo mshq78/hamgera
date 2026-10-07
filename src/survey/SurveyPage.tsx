@@ -189,7 +189,6 @@ export default function SurveyPage() {
       <div className="w-full flex flex-col gap-5 py-2">
         <header className="space-y-2 text-center pt-2">
           <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 dark:text-amber-100">{event.title}</h1>
-          {event.eventDate && <p className="text-sm text-slate-500 dark:text-slate-400">{formatTehranDate(dayToInstant(event.eventDate))}</p>}
         </header>
         <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 p-6 shadow-sm space-y-4">
           <p className="text-base leading-loose text-slate-700 dark:text-slate-200">{T.introLead}</p>
