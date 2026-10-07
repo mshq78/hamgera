@@ -200,7 +200,7 @@ import type { RxEvent } from '../src/survey/admin/rxApi.js';
 
 export async function runReactionExports() {
   const { results, check, equal } = createChecker();
-  const event = { id: 'e1', code: 'abc', title: 'بوت‌کمپ ۳ت', eventDate: '2026-10-10', cohort: 'دوره ۱', location: null, segments: [], isActive: true, opensAt: null, closesAt: null, surveyVersion: '1.0', createdAt: '', status: 'open', responses: 2 } as RxEvent;
+  const event = { id: 'e1', code: 'abc', title: 'بوت‌کمپ ۳ت', eventDate: '2026-10-10', cohort: 'دوره ۱', location: null, segments: [], isActive: true, opensAt: null, closesAt: null, surveyVersion: '1.0', kind: 'tt', config: { profileP02: true, profileP03: true }, createdAt: '', status: 'open', responses: 2 } as RxEvent;
   const rs: RxResponse[] = [
     response({ id: 'r1', likert: 4, q21: 8, q22: 9, segment: 'مدیران', words: ['الف', 'ب', 'ج'], answers: { Q23: '=HYPERLINK("x")', Q25: 'متن، با ویرگول و "نقل‌قول"' } }),
     response({ id: 'r2', likert: 5, q21: 10, q22: 10, words: ['تنها'] }),

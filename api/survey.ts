@@ -3,6 +3,8 @@ import { db } from './_lib/db.js';
 import { answerRows, eventByCode, statusOf } from './_lib/reaction.js';
 import { cleanSubmission, eventAccepts } from '../shared/reaction/validate.js';
 import { SURVEY_VERSION } from '../shared/reaction/questions.js';
+import { cleanHampayam } from '../shared/hampayam/validate.js';
+import { HP_VERSION } from '../shared/hampayam/questions.js';
 
 /**
  * Public, anonymous endpoint of an event survey (no login). Nothing identifying is read or stored: no name,
@@ -26,6 +28,8 @@ export default endpoint(async (req, res) => {
 
   if (req.method === 'GET') {
     return {
+      kind: event.kind,
+      config: event.config,
       title: event.title,
       eventDate: event.eventDate,
       segments: event.segments,
@@ -47,12 +51,19 @@ export default endpoint(async (req, res) => {
     return { ok: true };
   }
 
-  const clean = cleanSubmission(req.body, event.segments);
+  const hp = event.kind === 'hampayam';
+  // HamPayam keeps no separate "segment": its optional profile answers (P01–P03) are stored like any other answer.
+  const clean = hp
+    ? (() => {
+        const c = cleanHampayam(req.body, event.segments, event.config);
+        return 'error' in c ? c : { ...c, segment: null as string | null, words: [] as string[] };
+      })()
+    : cleanSubmission(req.body, event.segments);
   if ('error' in clean) throw new HttpError(400, clean.error);
   if (!eventAccepts(event, clean.startedAt, now)) throw new HttpError(403, 'closed');
 
   const duration = Math.max(0, Math.round((now - Date.parse(clean.startedAt)) / 1000));
-  const version = typeof clientVersion === 'string' ? clientVersion.slice(0, 20) : SURVEY_VERSION;
+  const version = typeof clientVersion === 'string' ? clientVersion.slice(0, 20) : hp ? HP_VERSION : SURVEY_VERSION;
   const inserted = await sql`
     INSERT INTO hamgera_rx_responses (id, event_id, segment, status, started_at, submitted_at, duration_seconds, client_version)
     VALUES (${responseId}, ${event.id}, ${clean.segment}, 'submitted', ${clean.startedAt}::timestamptz, now(), ${duration}, ${version})

@@ -1,6 +1,8 @@
 import { request } from '@/core/services/http';
 
 export interface PublicEvent {
+  kind: 'tt' | 'hampayam';
+  config: { profileP02: boolean; profileP03: boolean };
   title: string;
   eventDate: string | null;
   segments: string[];

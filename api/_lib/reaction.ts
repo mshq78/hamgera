@@ -3,6 +3,9 @@ import { db, Row } from './db.js';
 import type { RxResponse } from '../../shared/reaction/metrics.js';
 import { WORDS_ID } from '../../shared/reaction/questions.js';
 import { EventWindow, eventStatus } from '../../shared/reaction/validate.js';
+import { HpConfig, hpConfig } from '../../shared/hampayam/questions.js';
+
+export type SurveyKind = 'tt' | 'hampayam';
 
 /** Shared server helpers for the anonymous reaction surveys (api/survey.ts and api/reaction.ts). */
 
@@ -32,6 +35,8 @@ export interface EventRow {
   opensAt: string | null;
   closesAt: string | null;
   surveyVersion: string;
+  kind: SurveyKind;
+  config: HpConfig;
   createdAt: string;
 }
 
@@ -48,6 +53,8 @@ export function eventFromRow(r: Row): EventRow {
     opensAt: iso(r.opens_at),
     closesAt: iso(r.closes_at),
     surveyVersion: r.survey_version,
+    kind: r.kind === 'hampayam' ? 'hampayam' : 'tt',
+    config: hpConfig(r.config),
     createdAt: iso(r.created_at)!,
   };
 }
@@ -98,7 +105,7 @@ export async function loadResponses(eventIds: string[], includeDeleted: boolean)
       };
       out.set(r.id, o);
     }
-    if (r.question_id === WORDS_ID) {
+    if (r.question_id === WORDS_ID && r.word_index !== null && r.word_index !== undefined) {
       const list = words.get(r.id) ?? [];
       list.push({ index: r.word_index ?? 0, word: r.text_value });
       words.set(r.id, list);

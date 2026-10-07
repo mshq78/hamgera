@@ -4,6 +4,7 @@ import { requireAdmin } from './_lib/auth.js';
 import { answerRows, eventById, eventFromRow, loadResponses, newEventCode, newId, statusOf } from './_lib/reaction.js';
 import { LIKERT_IDS, MAX_OPEN_CHARS, MAX_WORD_CHARS, NPS_ID, OPEN_IDS, OVERALL_ID, SURVEY_VERSION, WORDS_ID, WORD_COUNT } from '../shared/reaction/questions.js';
 import { sanitizeText } from '../shared/reaction/validate.js';
+import { HP_JOURNEY_IDS, HP_LIKERT_IDS, HP_NA, HP_OPEN, HP_OPEN_IDS, HP_SCALE_IDS, HP_VERSION, hpConfig } from '../shared/hampayam/questions.js';
 
 /**
  * Admin-only management of reaction surveys (header `x-admin-password`).
@@ -40,7 +41,8 @@ function eventInput(b: any) {
   const opensAt = iso(b.opensAt);
   const closesAt = iso(b.closesAt);
   if (opensAt && closesAt && Date.parse(closesAt) <= Date.parse(opensAt)) throw new HttpError(400, 'closes_before_opens');
-  return { title, eventDate, cohort: text(b.cohort, 60), location: text(b.location, 120), segments, isActive: b.isActive !== false, opensAt, closesAt };
+  const config = hpConfig(b.config);
+  return { title, eventDate, cohort: text(b.cohort, 60), location: text(b.location, 120), segments, isActive: b.isActive !== false, opensAt, closesAt, config };
 }
 
 export default endpoint(async (req, res) => {
@@ -80,13 +82,15 @@ export default endpoint(async (req, res) => {
   switch (b.action) {
     case 'createEvent': {
       const e = eventInput(b);
+      const kind = b.kind === 'hampayam' ? 'hampayam' : 'tt';
+      const version = kind === 'hampayam' ? HP_VERSION : SURVEY_VERSION;
       const id = newId();
       // Short codes can collide: the unique index decides, and we simply draw another one.
       for (let attempt = 0; ; attempt++) {
         const code = newEventCode();
         const rows = await sql`
-          INSERT INTO hamgera_rx_events (id, code, title, event_date, cohort, location, segments, is_active, opens_at, closes_at, survey_version)
-          VALUES (${id}, ${code}, ${e.title}, ${e.eventDate}::date, ${e.cohort}, ${e.location}, ${JSON.stringify(e.segments)}::jsonb, ${e.isActive}, ${e.opensAt}::timestamptz, ${e.closesAt}::timestamptz, ${SURVEY_VERSION})
+          INSERT INTO hamgera_rx_events (id, code, title, event_date, cohort, location, segments, is_active, opens_at, closes_at, survey_version, kind, config)
+          VALUES (${id}, ${code}, ${e.title}, ${e.eventDate}::date, ${e.cohort}, ${e.location}, ${JSON.stringify(e.segments)}::jsonb, ${e.isActive}, ${e.opensAt}::timestamptz, ${e.closesAt}::timestamptz, ${version}, ${kind}, ${JSON.stringify(e.config)}::jsonb)
           ON CONFLICT (code) DO NOTHING
           RETURNING code
         `;
@@ -103,7 +107,8 @@ export default endpoint(async (req, res) => {
       const e = eventInput(b);
       await sql`
         UPDATE hamgera_rx_events SET title = ${e.title}, event_date = ${e.eventDate}::date, cohort = ${e.cohort}, location = ${e.location},
-          segments = ${JSON.stringify(e.segments)}::jsonb, is_active = ${e.isActive}, opens_at = ${e.opensAt}::timestamptz, closes_at = ${e.closesAt}::timestamptz
+          segments = ${JSON.stringify(e.segments)}::jsonb, is_active = ${e.isActive}, opens_at = ${e.opensAt}::timestamptz, closes_at = ${e.closesAt}::timestamptz,
+          config = ${JSON.stringify(before.kind === 'hampayam' ? e.config : before.config)}::jsonb
         WHERE id = ${before.id}
       `;
       await audit('update_event', before.id, null, before, e);
@@ -118,6 +123,9 @@ export default endpoint(async (req, res) => {
       const found = await sql`SELECT event_id FROM hamgera_rx_responses WHERE id = ${rid}`;
       if (!found[0]) throw new HttpError(404, 'response_not_found');
       const eventId: string = found[0].event_id;
+      const ev = await eventById(eventId);
+      const hp = ev?.kind === 'hampayam';
+      const openIds = hp ? HP_OPEN_IDS : OPEN_IDS;
       const [current] = await loadResponses([eventId], true).then((all) => all.filter((r) => r.id === rid));
 
       if (b.action === 'deleteResponse' || b.action === 'restoreResponse') {
@@ -128,7 +136,7 @@ export default endpoint(async (req, res) => {
       }
 
       if (b.action === 'setTags') {
-        if (!OPEN_IDS.includes(b.questionId) || !Array.isArray(b.tags)) throw new HttpError(400, 'invalid_tags');
+        if (!openIds.includes(b.questionId) || !Array.isArray(b.tags)) throw new HttpError(400, 'invalid_tags');
         const tags = [...new Set(b.tags.map((t: unknown) => sanitizeText(t, 30)).filter(Boolean))].slice(0, 10);
         const before = current?.tags[b.questionId] ?? [];
         await sql`UPDATE hamgera_rx_answers SET tags = ${JSON.stringify(tags)}::jsonb WHERE response_id = ${rid} AND question_id = ${b.questionId}`;
@@ -138,6 +146,41 @@ export default endpoint(async (req, res) => {
 
       // editResponse: validate every change first, apply only if all are valid
       const changes = b.changes;
+      if (hp) {
+        // HamPayam: ratings, journey (1–5 or N/A) and open answers can be corrected; every change is audited.
+        if (!changes || typeof changes !== 'object' || Object.keys(changes).length === 0) throw new HttpError(400, 'invalid_changes');
+        const hb: Record<string, unknown> = {};
+        const ha: Record<string, unknown> = {};
+        const hw: (() => Promise<unknown>)[] = [];
+        for (const [qid, value] of Object.entries(changes)) {
+          hb[qid] = current?.answers[qid] ?? null;
+          if (HP_LIKERT_IDS.includes(qid) || HP_SCALE_IDS.includes(qid)) {
+            const [lo, hi] = HP_LIKERT_IDS.includes(qid) ? [1, 5] : [0, 10];
+            if (typeof value !== 'number' || !Number.isInteger(value) || value < lo || value > hi) throw new HttpError(400, 'invalid_changes');
+            ha[qid] = value;
+            hw.push(() => sql`UPDATE hamgera_rx_answers SET numeric_value = ${value}, updated_at = now() WHERE response_id = ${rid} AND question_id = ${qid}`);
+          } else if (HP_JOURNEY_IDS.includes(qid)) {
+            const na = value === HP_NA;
+            const none = value === null;
+            if (!na && !none && (typeof value !== 'number' || !Number.isInteger(value) || value < 1 || value > 5)) throw new HttpError(400, 'invalid_changes');
+            ha[qid] = value;
+            hw.push(async () => {
+              await sql`DELETE FROM hamgera_rx_answers WHERE response_id = ${rid} AND question_id = ${qid}`;
+              if (!none) await sql`INSERT INTO hamgera_rx_answers (response_id, question_id, numeric_value, text_value) VALUES (${rid}, ${qid}, ${na ? null : (value as number)}, ${na ? HP_NA : null})`;
+            });
+          } else if (openIds.includes(qid)) {
+            const t = sanitizeText(value, HP_OPEN.find((o) => o.id === qid)!.max);
+            ha[qid] = t || null;
+            hw.push(async () => {
+              await sql`DELETE FROM hamgera_rx_answers WHERE response_id = ${rid} AND question_id = ${qid}`;
+              if (t) await sql`INSERT INTO hamgera_rx_answers (response_id, question_id, text_value) VALUES (${rid}, ${qid}, ${t})`;
+            });
+          } else throw new HttpError(400, 'invalid_changes');
+        }
+        for (const w of hw) await w();
+        await audit('edit_response', eventId, rid, hb, ha);
+        return { ok: true };
+      }
       if (!changes || typeof changes !== 'object' || Object.keys(changes).length === 0) throw new HttpError(400, 'invalid_changes');
       const before: Record<string, unknown> = {};
       const after: Record<string, unknown> = {};

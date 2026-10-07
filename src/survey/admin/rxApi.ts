@@ -14,6 +14,8 @@ export interface RxEvent {
   opensAt: string | null;
   closesAt: string | null;
   surveyVersion: string;
+  kind: 'tt' | 'hampayam';
+  config: { profileP02: boolean; profileP03: boolean };
   createdAt: string;
   status: TestStatus;
   responses: number;
@@ -44,6 +46,8 @@ export interface EventInput {
   isActive: boolean;
   opensAt: string | null;
   closesAt: string | null;
+  kind?: 'tt' | 'hampayam';
+  config?: { profileP02: boolean; profileP03: boolean };
 }
 
 const post = <T,>(pw: string, body: Record<string, unknown>) => request<T>('/api/reaction', { method: 'POST', adminPassword: pw, body });

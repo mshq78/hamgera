@@ -11,6 +11,10 @@ import { EventForm } from './EventForm';
 import { RxDashboard } from './RxDashboard';
 import { ResponsesTable } from './ResponsesTable';
 import { buildCsv, buildSheets } from './exports';
+import { HpDashboard } from './HpDashboard';
+import { HpResponsesTable } from './HpResponsesTable';
+import { hpCsv, hpOpenCsv, hpSheets } from './hpExports';
+import { MIN_GROUP, ProfileKey, profileGroups } from '../../../shared/hampayam/metrics';
 
 /** The «ارزیابی واکنش» tab of the admin panel: events and their links, the dashboard, raw responses, the audit log. */
 
@@ -31,6 +35,7 @@ export const ReactionPanel: React.FC<{ adminPassword: string }> = ({ adminPasswo
   const [view, setView] = useState<View>('dashboard');
   const [cohort, setCohort] = useState('');
   const [segment, setSegment] = useState('');
+  const [profile, setProfile] = useState<Record<ProfileKey, string>>({ P01: '', P02: '', P03: '' });
   const [from, setFrom] = useState<string | null>(null);
   const [to, setTo] = useState<string | null>(null);
   const [showDeleted, setShowDeleted] = useState(false);
@@ -66,9 +71,13 @@ export const ReactionPanel: React.FC<{ adminPassword: string }> = ({ adminPasswo
   }, [view, adminPassword, selected]);
 
   const chosen = useMemo(() => (events ?? []).filter((e) => selected.includes(e.id)), [events, selected]);
+  const kind = chosen[0]?.kind ?? 'tt';
+  const isHp = kind === 'hampayam';
+  // Filter values are offered only for groups with at least MIN_GROUP final responses (privacy rule).
+  const groups = useMemo(() => ({ P01: profileGroups(responses.filter((r) => !r.deleted), 'P01'), P02: profileGroups(responses.filter((r) => !r.deleted), 'P02'), P03: profileGroups(responses.filter((r) => !r.deleted), 'P03') }), [responses]);
   const cohorts = useMemo(() => [...new Set(chosen.map((e) => e.cohort).filter(Boolean) as string[])], [chosen]);
   const segments = useMemo(() => [...new Set(chosen.flatMap((e) => e.segments))], [chosen]);
-  const compatibleBaselines = (events ?? []).filter((e) => !selected.includes(e.id) && chosen.length > 0 && e.surveyVersion === chosen[0].surveyVersion);
+  const compatibleBaselines = (events ?? []).filter((e) => !selected.includes(e.id) && chosen.length > 0 && e.surveyVersion === chosen[0].surveyVersion && e.kind === chosen[0].kind);
 
   const filtered = useMemo(
     () =>
@@ -76,15 +85,16 @@ export const ReactionPanel: React.FC<{ adminPassword: string }> = ({ adminPasswo
         if (r.deleted) return false;
         if (cohort && events?.find((e) => e.id === r.eventId)?.cohort !== cohort) return false;
         if (segment && r.segment !== segment) return false;
+        for (const k of ['P01', 'P02', 'P03'] as ProfileKey[]) if (profile[k] && r.answers[k] !== profile[k]) return false;
         if (from && dayOf(r.submittedAt) < dayOf(from)) return false;
         if (to && dayOf(r.submittedAt) > dayOf(to)) return false;
         return true;
       }),
-    [responses, cohort, segment, from, to, events]
+    [responses, cohort, segment, profile, from, to, events]
   );
-  const baseline = useMemo(() => baselineResponses.filter((r) => !segment || r.segment === segment), [baselineResponses, segment]);
+  const baseline = useMemo(() => baselineResponses.filter((r) => (!segment || r.segment === segment) && (['P01', 'P02', 'P03'] as ProfileKey[]).every((k) => !profile[k] || r.answers[k] === profile[k])), [baselineResponses, segment, profile]);
 
-  const filterNote = [cohort && `گروه: ${cohort}`, segment && `زیرگروه: ${segment}`, from && `از ${formatTehranDate(from, false)}`, to && `تا ${formatTehranDate(to, false)}`].filter(Boolean).join(' · ') || 'بدون فیلتر';
+  const filterNote = [cohort && `گروه: ${cohort}`, segment && `زیرگروه: ${segment}`, profile.P01 && `شرکت/واحد: ${profile.P01}`, profile.P02 && `سطح مسئولیت: ${profile.P02}`, profile.P03 && `سابقه: ${profile.P03}`, from && `از ${formatTehranDate(from, false)}`, to && `تا ${formatTehranDate(to, false)}`].filter(Boolean).join(' · ') || 'بدون فیلتر';
 
   const copy = async (e: RxEvent) => {
     try {
@@ -102,11 +112,29 @@ export const ReactionPanel: React.FC<{ adminPassword: string }> = ({ adminPasswo
   };
 
   const stamp = () => new Date().toISOString().slice(0, 10);
-  const exportCsv = () => downloadText(buildCsv(chosen, filtered), 'text/csv;charset=utf-8;', `reaction_${stamp()}.csv`);
+  const tagMap = () => Object.fromEntries(filtered.map((r) => [r.id, r.tags]));
+  const exportCsv = () => {
+    if (isHp) {
+      downloadText(hpCsv(chosen, filtered), 'text/csv;charset=utf-8;', `hampayam_closed_${stamp()}.csv`);
+      setTimeout(() => downloadText(hpOpenCsv(chosen, filtered, tagMap()), 'text/csv;charset=utf-8;', `hampayam_open_${stamp()}.csv`), 300);
+    } else downloadText(buildCsv(chosen, filtered), 'text/csv;charset=utf-8;', `reaction_${stamp()}.csv`);
+  };
   const exportExcel = async () => {
     setExporting(true);
     try {
       const { default: writeExcelFile } = await import('write-excel-file/browser');
+      if (isHp) {
+        const h = hpSheets(chosen, filtered, filterNote);
+        await writeExcelFile([
+          { data: h.summary as any, sheet: 'Summary', rightToLeft: true },
+          { data: h.questions as any, sheet: 'Questions', stickyRowsCount: 1, rightToLeft: true },
+          { data: h.journey as any, sheet: 'Journey', stickyRowsCount: 1, rightToLeft: true },
+          { data: h.openFeedback as any, sheet: 'Open Feedback', stickyRowsCount: 1, rightToLeft: true },
+          { data: h.metadata as any, sheet: 'Metadata', rightToLeft: true },
+          { data: h.raw as any, sheet: 'Raw Responses', stickyRowsCount: 1, rightToLeft: true },
+        ]).toFile(`hampayam_${stamp()}.xlsx`);
+        return;
+      }
       const sheets = buildSheets(chosen, filtered, filterNote);
       await writeExcelFile([
         { data: sheets.raw as any, sheet: 'Raw Responses', stickyRowsCount: 1, rightToLeft: true },
@@ -149,13 +177,14 @@ export const ReactionPanel: React.FC<{ adminPassword: string }> = ({ adminPasswo
               <li key={e.id} className="rounded-xl border border-slate-200 dark:border-slate-800 p-3 space-y-2">
                 <div className="flex flex-wrap items-center gap-3">
                   <label className="flex items-center gap-2 text-sm font-semibold cursor-pointer">
-                    <input type="checkbox" className="h-4 w-4 accent-amber-500" checked={selected.includes(e.id)} onChange={(ev) => setSelected((cur) => (ev.target.checked ? [...cur, e.id] : cur.filter((x) => x !== e.id)))} aria-label={`انتخاب ${e.title}`} />
+                    <input type="checkbox" className="h-4 w-4 accent-amber-500" checked={selected.includes(e.id)} onChange={(ev) => { setProfile({ P01: '', P02: '', P03: '' }); setSegment(''); setCohort(''); setSelected((cur) => (ev.target.checked ? [...cur.filter((id) => events.find((x) => x.id === id)?.kind === e.kind), e.id] : cur.filter((x) => x !== e.id))); }} aria-label={`انتخاب ${e.title}`} />
                     {e.title}
                   </label>
                   <span className="text-xs text-slate-500 dark:text-slate-400">
                     {e.eventDate ? formatTehranDate(dayToInstant(e.eventDate), false) : '—'}{e.cohort ? ` · ${e.cohort}` : ''}{e.location ? ` · ${e.location}` : ''}
                   </span>
                   <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full border border-slate-300 dark:border-slate-700">{STATUS_TEXT[e.status]}</span>
+                  <span className="text-[11px] px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">{e.kind === 'hampayam' ? 'تجربه هم‌پیام' : 'واکنش ۳ت'}</span>
                   <span className="text-xs text-slate-600 dark:text-slate-300">{toPersianDigits(e.responses)} پاسخ</span>
                   <span className="flex-1" />
                   <Button variant="ghost" size="sm" leftIcon={<Pencil className="w-3.5 h-3.5" />} onClick={() => setEditing(e)}>ویرایش</Button>
@@ -181,7 +210,14 @@ export const ReactionPanel: React.FC<{ adminPassword: string }> = ({ adminPasswo
                   <select className={`${select} block`} value={cohort} onChange={(e) => setCohort(e.target.value)}><option value="">همه</option>{cohorts.map((c) => <option key={c}>{c}</option>)}</select>
                 </label>
               )}
-              {segments.length > 0 && (
+              {isHp && ([['P01', 'شرکت/واحد'], ['P02', 'سطح مسئولیت'], ['P03', 'سابقه حضور']] as [ProfileKey, string][]).map(([k, label]) => (
+                <label key={k} className="text-xs space-y-1 block">{label}
+                  <select className={`${select} block`} value={profile[k]} onChange={(e) => setProfile((p) => ({ ...p, [k]: e.target.value }))} disabled={groups[k].length === 0}>
+                    <option value="">همه</option>{groups[k].map((g) => <option key={g.value} value={g.value}>{g.value} ({toPersianDigits(g.n)})</option>)}
+                  </select>
+                </label>
+              ))}
+              {!isHp && segments.length > 0 && (
                 <label className="text-xs space-y-1 block">زیرگروه
                   <select className={`${select} block`} value={segment} onChange={(e) => setSegment(e.target.value)}><option value="">همه</option>{segments.map((c) => <option key={c}>{c}</option>)}</select>
                 </label>
@@ -197,7 +233,7 @@ export const ReactionPanel: React.FC<{ adminPassword: string }> = ({ adminPasswo
               <JalaliDateTimeInput label="از تاریخ ارسال (اختیاری)" value={from} dateOnly optional onChange={setFrom} />
               <JalaliDateTimeInput label="تا تاریخ ارسال (اختیاری)" value={to} dateOnly optional onChange={setTo} />
             </div>
-            <p className="text-[11px] text-slate-500 dark:text-slate-400">مقایسه فقط بین رویدادهای دارای نسخهٔ یکسان پرسشنامه ممکن است.</p>
+            <p className="text-[11px] text-slate-500 dark:text-slate-400">مقایسه فقط بین رویدادهای هم‌نوع و دارای نسخهٔ یکسان پرسشنامه ممکن است.{isHp && ` فیلتر گروهی فقط برای گروه‌های دارای دست‌کم ${toPersianDigits(MIN_GROUP)} پاسخ فعال می‌شود.`}</p>
           </section>
 
           {/* views */}
@@ -217,17 +253,20 @@ export const ReactionPanel: React.FC<{ adminPassword: string }> = ({ adminPasswo
           <div className="print-only" style={{ marginBottom: 12 }}>
             <img src="/logo.png" alt="" style={{ width: 44, height: 44, float: 'left' }} />
             <p style={{ fontSize: 11 }}>هم‌گرا · پردیس نوآوری گرا</p>
-            <h1 style={{ fontSize: 22, fontWeight: 800 }}>گزارش ارزیابی واکنش — {chosen.map((e) => e.title).join('، ')}</h1>
+            <h1 style={{ fontSize: 22, fontWeight: 800 }}>{isHp ? 'گزارش ارزیابی تجربه هم‌پیام' : 'گزارش ارزیابی واکنش'} — {chosen.map((e) => e.title).join('، ')}</h1>
             <p style={{ fontSize: 12 }}>{filterNote} · تهیه‌شده در {formatTehran(new Date().toISOString(), false)}</p>
           </div>
 
-          {view === 'dashboard' && (
+          {view === 'dashboard' && isHp && (
+            <HpDashboard responses={filtered} baseline={baselineId ? baseline : null} baselineTitle={events.find((e) => e.id === baselineId)?.title ?? null} title={chosen.map((e) => e.title).join('، ')} onSetTags={setTags} />
+          )}
+          {view === 'dashboard' && !isHp && (
             <RxDashboard responses={filtered} baseline={baselineId ? baseline : null} baselineTitle={events.find((e) => e.id === baselineId)?.title ?? null} onSetTags={setTags} />
           )}
           {view === 'raw' && (
             <div className="space-y-2 no-print">
               <label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={showDeleted} onChange={(e) => setShowDeleted(e.target.checked)} /> نمایش پاسخ‌های حذف‌شده</label>
-              <ResponsesTable adminPassword={adminPassword} events={events} responses={responses.filter((r) => showDeleted || !r.deleted)} reload={async () => { await loadResponses(); await loadEvents(); }} />
+              {isHp ? <HpResponsesTable adminPassword={adminPassword} events={events} responses={responses.filter((r) => showDeleted || !r.deleted)} reload={async () => { await loadResponses(); await loadEvents(); }} /> : <ResponsesTable adminPassword={adminPassword} events={events} responses={responses.filter((r) => showDeleted || !r.deleted)} reload={async () => { await loadResponses(); await loadEvents(); }} />}
             </div>
           )}
           {view === 'audit' && (

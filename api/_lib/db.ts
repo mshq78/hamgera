@@ -104,6 +104,9 @@ async function createSchema(sql: Sql) {
       created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
     )
   `;
+  // `kind` picks the questionnaire ('tt' = the 3T reaction form, 'hampayam' = the HamPayam experience form).
+  await sql`ALTER TABLE hamgera_rx_events ADD COLUMN IF NOT EXISTS kind TEXT NOT NULL DEFAULT 'tt'`;
+  await sql`ALTER TABLE hamgera_rx_events ADD COLUMN IF NOT EXISTS config JSONB NOT NULL DEFAULT '{}'`;
   await sql`
     CREATE TABLE IF NOT EXISTS hamgera_rx_responses (
       id                TEXT PRIMARY KEY,
